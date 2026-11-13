@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ระบบติดตามตำแหน่งหัวรถจักร Real-time (LINE + Traccar GPS)</title>
+  <title>ระบบติดตามตำแหน่งหัวรถจักร Real-time (SRT Live GPS)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -34,6 +34,11 @@
 </head>
 <body class="bg-slate-100 overflow-hidden">
 
+  <!-- ========================================================================= -->
+  <!-- จุดวางลิงก์ Google Apps Script: วางลิงก์ที่ลงท้ายด้วย /exec ใน value="" ด้านล่างนี้ -->
+  <!-- ========================================================================= -->
+  <input type="hidden" id="sheetUrlConfig" value="https://script.google.com/macros/s/AKfycbwaUdQWc4roigLZ07zeXMiPcRjGaFHLSUehg8E_jo1HD9X6-D26uWxsOlK6c9AEK9vC/exec">
+
   <!-- แถบเมนูด้านบน -->
   <header class="h-16 bg-slate-900 text-white px-4 flex items-center justify-between shadow-md z-20 relative">
     <div class="flex items-center gap-3">
@@ -42,16 +47,13 @@
       </div>
       <div>
         <h1 class="font-heading text-base md:text-lg font-semibold leading-tight">ระบบติดตามตำแหน่งหัวรถจักรแบบ Real-time</h1>
-        <p id="syncStatusText" class="text-xs text-slate-400">เชื่อมต่อข้อมูลผ่าน Google Sheets (LINE OA + Traccar GPS)</p>
+        <p id="syncStatusText" class="text-xs text-slate-400">กำลังเชื่อมต่อข้อมูล...</p>
       </div>
     </div>
 
     <div class="flex items-center gap-2">
-      <button type="button" onclick="fetchSheetData()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer">
-        🔄 อัปเดตข้อมูลเดี๋ยวนี้
-      </button>
-      <button type="button" onclick="openSettingModal()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-heading font-semibold px-3.5 py-1.5 rounded-lg text-xs md:text-sm transition shadow cursor-pointer">
-        ⚙️ ตั้งค่าลิงก์ Google Sheets
+      <button type="button" onclick="fetchSheetData()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition cursor-pointer">
+        🔄 รีเฟรชข้อมูลเดี๋ยวนี้
       </button>
     </div>
   </header>
@@ -100,37 +102,14 @@
     </main>
   </div>
 
-  <!-- MODAL: ตั้งค่าลิงก์ Google Apps Script -->
-  <div id="settingModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-      <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="font-heading text-lg font-bold text-slate-800">⚙️ ตั้งค่าลิงก์เชื่อมต่อ Google Sheets</h3>
-        <button type="button" onclick="closeSettingModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none cursor-pointer">&times;</button>
-      </div>
-      <div class="space-y-2 text-sm text-slate-600">
-        <p>วาง <strong>Web App URL</strong> จาก Google Apps Script (ที่ลงท้ายด้วย <code>/exec</code>):</p>
-        <input 
-          type="url" 
-          id="scriptUrlInput" 
-          placeholder="https://script.google.com/macros/s/xxxxxx/exec" 
-          class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-        >
-      </div>
-      <div class="flex justify-end gap-2 pt-3 border-t">
-        <button type="button" onclick="closeSettingModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium cursor-pointer">ยกเลิก</button>
-        <button type="button" onclick="saveScriptUrl()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-heading font-semibold rounded-lg text-sm cursor-pointer">บันทึกและเชื่อมต่อ</button>
-      </div>
-    </div>
-  </div>
-
   <script>
-    let tempUrl = "";
     function getUrl() {
-      try { return localStorage.getItem('srt_gps_sheet_url') || tempUrl; } catch (e) { return tempUrl; }
-    }
-    function setUrl(val) {
-      tempUrl = val;
-      try { localStorage.setItem('srt_gps_sheet_url', val); } catch (e) {}
+      const el = document.getElementById('sheetUrlConfig');
+      const val = el ? el.value.trim() : "";
+      if (val && val !== "วางลิงก์_EXEC_ตรงนี้") {
+        return val;
+      }
+      return "";
     }
 
     let locomotives = [];
@@ -150,32 +129,28 @@
       L.control.layers({ "แผนที่ถนน": googleStreets, "ดาวเทียม": googleHybrid }).addTo(map);
 
       renderAll();
-
-      if (getUrl()) {
-        fetchSheetData();
-      } else {
-        openSettingModal();
-      }
+      fetchSheetData();
 
       // ดึงข้อมูลจาก Google Sheets อัตโนมัติทุกๆ 5 วินาที
-      setInterval(() => {
-        if (getUrl()) fetchSheetData();
-      }, 5000);
+      setInterval(fetchSheetData, 5000);
     }
 
     async function fetchSheetData() {
       const url = getUrl();
-      if (!url) return;
+      if (!url) {
+        document.getElementById('syncStatusText').textContent = '⚠️ ยังไม่ได้ใส่ลิงก์ /exec ในบรรทัดที่ 35 ของไฟล์ HTML';
+        return;
+      }
       try {
         const res = await fetch(url);
         const data = await res.json();
         if (Array.isArray(data)) {
           locomotives = data.filter(r => r.id);
           renderAll();
-          document.getElementById('syncStatusText').textContent = '🟢 ซิงค์ข้อมูลล่าสุดเมื่อ: ' + new Date().toLocaleTimeString('th-TH');
+          document.getElementById('syncStatusText').textContent = '🟢 อัปเดตข้อมูลล่าสุดเมื่อ: ' + new Date().toLocaleTimeString('th-TH');
         }
       } catch (err) {
-        document.getElementById('syncStatusText').textContent = '🔴 ไม่สามารถดึงข้อมูลได้ (ตรวจสอบลิงก์ Google Sheets)';
+        document.getElementById('syncStatusText').textContent = '🔴 ไม่สามารถดึงข้อมูลได้ (ตรวจสอบลิงก์ /exec หรือสิทธิ์ Anyone)';
       }
     }
 
@@ -196,8 +171,8 @@
         listEl.innerHTML = `
           <div class="p-6 text-center text-slate-400 text-sm space-y-2">
             <div class="text-2xl">🚂</div>
-            <div class="font-medium text-slate-600">ยังไม่มีข้อมูลรถจักรในตาราง</div>
-            <div class="text-xs">เมื่อ พขร. พิมพ์ <b>"เริ่ม [เลขรถจักร] [เลขขบวน]"</b> ใน LINE ข้อมูลจะปรากฏขึ้นที่นี่ทันที</div>
+            <div class="font-medium text-slate-600">ยังไม่มีข้อมูลรถจักรในระบบ</div>
+            <div class="text-xs">เมื่อ พขร. พิมพ์ <b>"เริ่ม [เลขรถจักร] [เลขขบวน]"</b> ใน LINE ข้อมูลจะปรากฏขึ้นที่นี่อัตโนมัติ</div>
           </div>
         `;
         return;
@@ -294,23 +269,356 @@
       renderAll();
     }
 
-    function openSettingModal() {
-      document.getElementById('scriptUrlInput').value = getUrl();
-      document.getElementById('settingModal').classList.remove('hidden');
-      document.getElementById('settingModal').classList.add('flex');
+    document.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>inter in NPPM_SAVESESSION handler causing crash.
+10. Vulnerabilty: Fix stack buffer overflow caused by overlong session paths.
+11. Vulnerabilty: Fix Folder as Workspace "Run by system" target hijacking issue.
+12. Vulnerabilty: Fix install-path injection possibility with PowerShell.
+13. Vulnerabilty: Fix lower IL (Integrity Level) process sends WM_COMMAND to higher IL Notepad++.
+14. Vulnerabilty: Fix Notepad++ UIPI Bypass via WM_COPYDATA.
+15. Fix crash in WM_COPYDATA COPYDATA_PARAMS for invalid payload.
+16. Fix crash in API NPPM_ALLOCATE* calls.
+17. Add an option to allow loading symlinks in Folder as Workspace.
+18. Regression: Fix loading session for alone subview and doc/tab with untitle name.
+19. Fix CJK IME issues in Save As dialog.
+20. Update to Scintilla 5.6.6 & Lexilla 5.5.3.
+21. Add plugin deactivation capability.
+22. Add "-monitoringMode" command line argument to open files with monitoring enabled.
+23. Fix Proxy Settings issue in portable mode.
+24. Fix langs.xml model update not not applying file extension fields.
+25. Fix luminosity slider in ChooseColor not visible in dark mode.
+26. Fix empty sub-menus in compact language menu.
+27. Fix Search Results vertical scrolling not matching with OS mouse settings.
+28. Use modern question mark icon in dark message box.
+29. Format count numbers using current locale separators when needed.
+
+
+
+Get more info on
+https://notepad-plus-plus.org/downloads/v8.9.8.1/
+
+
+Included plugins:
+
+ 1.  NppExport v0.4
+ 2.  Converter v4.7
+ 3.  Mime Tool v3.1
+
+
+Updater (Installer only):
+
+* WinGUp (for Notepad++) v5.4.3
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบติดตามตำแหน่งหัวรถจักร Real-time (SRT Live GPS)</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Sarabun', sans-serif; margin: 0; padding: 0; }
+    h1, h2, h3, .font-heading { font-family: 'Kanit', sans-serif; }
+    #map { height: calc(100vh - 64px); width: 100%; background: #cbd5e1; z-index: 1; }
+    
+    .loco-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-family: 'Kanit', sans-serif;
+      color: white;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+      border: 2px solid white;
+      padding: 2px 6px;
+      line-height: 1.1;
     }
-    function closeSettingModal() {
-      document.getElementById('settingModal').classList.add('hidden');
-      document.getElementById('settingModal').classList.remove('flex');
+    .loco-active { background-color: #16a34a; } /* สีเขียว - กำลังวิ่งส่ง GPS */
+    .loco-ended  { background-color: #475569; } /* สีเทา - จุดสิ้นสุดงานล่าสุด */
+  </style>
+</head>
+<body class="bg-slate-100 overflow-hidden">
+
+  <!-- ========================================================================= -->
+  <!-- จุดวางลิงก์ Google Apps Script: วางลิงก์ที่ลงท้ายด้วย /exec ใน value="" ด้านล่างนี้ -->
+  <!-- ========================================================================= -->
+  <input type="hidden" id="sheetUrlConfig" value="https://script.google.com/macros/s/AKfycbwaUdQWc4roigLZ07zeXMiPcRjGaFHLSUehg8E_jo1HD9X6-D26uWxsOlK6c9AEK9vC/exec">
+
+  <!-- แถบเมนูด้านบน -->
+  <header class="h-16 bg-slate-900 text-white px-4 flex items-center justify-between shadow-md z-20 relative">
+    <div class="flex items-center gap-3">
+      <div class="bg-amber-500 text-slate-950 font-heading font-bold px-2.5 py-1 rounded text-lg">
+        SRT
+      </div>
+      <div>
+        <h1 class="font-heading text-base md:text-lg font-semibold leading-tight">ระบบติดตามตำแหน่งหัวรถจักรแบบ Real-time</h1>
+        <p id="syncStatusText" class="text-xs text-slate-400">กำลังเชื่อมต่อข้อมูล...</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button type="button" onclick="fetchSheetData()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition cursor-pointer">
+        🔄 รีเฟรชข้อมูลเดี๋ยวนี้
+      </button>
+    </div>
+  </header>
+
+  <!-- พื้นที่หลัก (แถบซ้าย + แผนที่) -->
+  <div class="flex" style="height: calc(100vh - 64px);">
+    
+    <!-- แถบข้อมูลด้านซ้าย -->
+    <aside class="w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col z-10 shadow-lg">
+      
+      <!-- สรุปสถานะ -->
+      <div class="grid grid-cols-2 gap-2 p-3 bg-slate-50 border-b border-slate-200 text-center">
+        <div class="bg-green-50 border border-green-200 rounded-lg p-2">
+          <div class="text-xs text-green-700 font-semibold">🟢 กำลังทำขบวน (GPS สด)</div>
+          <div id="countActive" class="font-heading text-xl font-bold text-green-700">0</div>
+        </div>
+        <div class="bg-slate-100 border border-slate-300 rounded-lg p-2">
+          <div class="text-xs text-slate-600 font-semibold">⚪ สิ้นสุดงาน (จุดสุดท้าย)</div>
+          <div id="countEnded" class="font-heading text-xl font-bold text-slate-700">0</div>
+        </div>
+      </div>
+
+      <!-- ช่องค้นหาและตัวกรอง -->
+      <div class="p-3 border-b border-slate-200 space-y-2">
+        <input 
+          type="text" 
+          id="searchInput" 
+          oninput="renderAll()"
+          placeholder="ค้นหาเลขรถจักร หรือ เลขขบวน..." 
+          class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+        >
+        <div class="flex gap-1 text-xs">
+          <button type="button" onclick="setFilter('all')" id="btn-all" class="flex-1 py-1 rounded bg-slate-800 text-white font-medium cursor-pointer">ทั้งหมด</button>
+          <button type="button" onclick="setFilter('active')" id="btn-active" class="flex-1 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer">กำลังวิ่ง</button>
+          <button type="button" onclick="setFilter('ended')" id="btn-ended" class="flex-1 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer">จุดสิ้นสุดล่าสุด</button>
+        </div>
+      </div>
+
+      <!-- รายการรถจักร -->
+      <div id="locoList" class="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-2"></div>
+    </aside>
+
+    <!-- แผนที่ -->
+    <main class="flex-1 relative">
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <script>
+    function getUrl() {
+      const el = document.getElementById('sheetUrlConfig');
+      const val = el ? el.value.trim() : "";
+      if (val && val !== "วางลิงก์_EXEC_ตรงนี้") {
+        return val;
+      }
+      return "";
     }
-    function saveScriptUrl() {
-      const val = document.getElementById('scriptUrlInput').value.trim();
-      setUrl(val);
-      closeSettingModal();
+
+    let locomotives = [];
+    let markers = {};
+    let currentFilter = 'all';
+    let map = null;
+
+    function initApp() {
+      map = L.map('map').setView([13.8040, 100.5401], 6);
+      const googleStreets = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=th', {
+        maxZoom: 20, attribution: '&copy; Google Maps'
+      });
+      const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&hl=th', {
+        maxZoom: 20, attribution: '&copy; Google Satellite'
+      });
+      googleStreets.addTo(map);
+      L.control.layers({ "แผนที่ถนน": googleStreets, "ดาวเทียม": googleHybrid }).addTo(map);
+
+      renderAll();
       fetchSheetData();
+
+      // ดึงข้อมูลจาก Google Sheets อัตโนมัติทุกๆ 5 วินาที
+      setInterval(fetchSheetData, 5000);
+    }
+
+    async function fetchSheetData() {
+      const url = getUrl();
+      if (!url) {
+        document.getElementById('syncStatusText').textContent = '⚠️ ยังไม่ได้ใส่ลิงก์ /exec ในบรรทัดที่ 35 ของไฟล์ HTML';
+        return;
+      }
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          locomotives = data.filter(r => r.id);
+          renderAll();
+          document.getElementById('syncStatusText').textContent = '🟢 อัปเดตข้อมูลล่าสุดเมื่อ: ' + new Date().toLocaleTimeString('th-TH');
+        }
+      } catch (err) {
+        document.getElementById('syncStatusText').textContent = '🔴 ไม่สามารถดึงข้อมูลได้ (ตรวจสอบลิงก์ /exec หรือสิทธิ์ Anyone)';
+      }
+    }
+
+    function renderAll() {
+      const search = (document.getElementById('searchInput').value || "").trim().toLowerCase();
+      const listEl = document.getElementById('locoList');
+      listEl.innerHTML = '';
+
+      document.getElementById('countActive').textContent = locomotives.filter(l => l.status === 'active').length;
+      document.getElementById('countEnded').textContent = locomotives.filter(l => l.status !== 'active').length;
+
+      if (map) {
+        Object.values(markers).forEach(m => map.removeLayer(m));
+      }
+      markers = {};
+
+      if (locomotives.length === 0) {
+        listEl.innerHTML = `
+          <div class="p-6 text-center text-slate-400 text-sm space-y-2">
+            <div class="text-2xl">🚂</div>
+            <div class="font-medium text-slate-600">ยังไม่มีข้อมูลรถจักรในระบบ</div>
+            <div class="text-xs">เมื่อ พขร. พิมพ์ <b>"เริ่ม [เลขรถจักร] [เลขขบวน]"</b> ใน LINE ข้อมูลจะปรากฏขึ้นที่นี่อัตโนมัติ</div>
+          </div>
+        `;
+        return;
+      }
+
+      locomotives.forEach((loco, idx) => {
+        const matchSearch = String(loco.id).toLowerCase().includes(search) || 
+                            String(loco.trainNo).toLowerCase().includes(search);
+        const matchFilter = currentFilter === 'all' || 
+                            (currentFilter === 'active' && loco.status === 'active') ||
+                            (currentFilter === 'ended' && loco.status !== 'active');
+        if (!matchSearch || !matchFilter) return;
+
+        const isActive = loco.status === 'active';
+        const badgeClass = isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700';
+        const statusText = isActive ? '🟢 กำลังทำขบวน' : '⚪ จุดสิ้นสุดงานล่าสุด';
+        const markerClass = isActive ? 'loco-active' : 'loco-ended';
+        const posLabel = isActive ? 'ตำแหน่งปัจจุบัน' : 'จุดสิ้นสุดล่าสุด';
+
+        // การ์ดข้อมูลด้านซ้าย
+        const card = document.createElement('div');
+        card.className = 'p-3 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/30 cursor-pointer transition';
+        card.onclick = () => focusMarker(loco.id);
+        card.innerHTML = `
+          <div class="flex justify-between items-center">
+            <span class="font-heading font-bold text-base text-slate-900">รถจักร ${loco.id}</span>
+            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full ${badgeClass}">${statusText}</span>
+          </div>
+          <div class="mt-1.5 text-xs text-slate-800 flex justify-between">
+            <span>🚆 หมายเลขขบวน: <strong class="text-sm text-amber-700">${loco.trainNo || '-'}</strong></span>
+            <span>🚀 ความเร็ว: <strong>${loco.speed || 0} กม./ชม.</strong></span>
+          </div>
+          <div class="mt-1 text-xs text-slate-600">
+            📍 ${posLabel}: <strong class="text-slate-900">${loco.station || '-'}</strong>
+          </div>
+          <div class="mt-1.5 text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded inline-block">
+            🕒 อัปเดตล่าสุด: <strong>${loco.updatedAt || '-'}</strong>
+          </div>
+        `;
+        listEl.appendChild(card);
+
+        // หมุดบนแผนที่
+        const lat = Number(loco.lat) || 13.8040;
+        const lng = Number(loco.lng) || 100.5401;
+        const offset = (idx % 5) * 0.0005;
+        const coords = [lat + offset, lng + offset];
+
+        const icon = L.divIcon({
+          className: '',
+          html: `
+            <div class="loco-marker ${markerClass}" style="min-width:56px;">
+              <div style="font-size:12px;font-weight:700;">${loco.id}</div>
+              <div style="font-size:10px;">ข.${loco.trainNo}</div>
+            </div>
+          `,
+          iconSize: [56, 36],
+          iconAnchor: [28, 18]
+        });
+
+        const marker = L.marker(coords, { icon }).addTo(map);
+        marker.bindPopup(`
+          <div style="font-family:'Sarabun',sans-serif; min-width:200px;">
+            <div style="font-weight:700; font-size:15px;">🚂 รถจักรหมายเลข ${loco.id}</div>
+            <div style="font-size:13px; margin-top:2px;">🚆 หมายเลขขบวน: <b>${loco.trainNo}</b></div>
+            <div style="font-size:12px; color:${isActive ? '#15803d' : '#475569'};">
+              สถานะ: <b>${isActive ? 'กำลังทำขบวน (ส่ง GPS สด)' : 'สิ้นสุดงานแล้ว (ค้างจุดสุดท้าย)'}</b>
+            </div>
+            <div style="font-size:12px;">🚀 ความเร็ว: <b>${loco.speed || 0} กม./ชม.</b></div>
+            <hr style="margin:6px 0;">
+            <div style="font-size:12px;">📍 ${posLabel}: <b>${loco.station || '-'}</b></div>
+            <div style="font-size:11px; color:#64748b;">พิกัด: ${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+            <div style="font-size:11px; color:#0f172a; margin-top:4px;">🕒 อัปเดตล่าสุด: <b>${loco.updatedAt || '-'}</b></div>
+          </div>
+        `);
+        markers[loco.id] = marker;
+      });
+    }
+
+    function focusMarker(id) {
+      const m = markers[id];
+      if (m && map) {
+        map.setView(m.getLatLng(), 14, { animate: true });
+        m.openPopup();
+      }
+    }
+
+    function setFilter(f) {
+      currentFilter = f;
+      ['all', 'active', 'ended'].forEach(k => {
+        document.getElementById('btn-' + k).className = (k === f)
+          ? 'flex-1 py-1 rounded bg-slate-800 text-white font-medium cursor-pointer'
+          : 'flex-1 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer';
+      });
+      renderAll();
     }
 
     document.addEventListener('DOMContentLoaded', initApp);
   </script>
 </body>
-</html>
+</html>inter in NPPM_SAVESESSION handler causing crash.
+10. Vulnerabilty: Fix stack buffer overflow caused by overlong session paths.
+11. Vulnerabilty: Fix Folder as Workspace "Run by system" target hijacking issue.
+12. Vulnerabilty: Fix install-path injection possibility with PowerShell.
+13. Vulnerabilty: Fix lower IL (Integrity Level) process sends WM_COMMAND to higher IL Notepad++.
+14. Vulnerabilty: Fix Notepad++ UIPI Bypass via WM_COPYDATA.
+15. Fix crash in WM_COPYDATA COPYDATA_PARAMS for invalid payload.
+16. Fix crash in API NPPM_ALLOCATE* calls.
+17. Add an option to allow loading symlinks in Folder as Workspace.
+18. Regression: Fix loading session for alone subview and doc/tab with untitle name.
+19. Fix CJK IME issues in Save As dialog.
+20. Update to Scintilla 5.6.6 & Lexilla 5.5.3.
+21. Add plugin deactivation capability.
+22. Add "-monitoringMode" command line argument to open files with monitoring enabled.
+23. Fix Proxy Settings issue in portable mode.
+24. Fix langs.xml model update not not applying file extension fields.
+25. Fix luminosity slider in ChooseColor not visible in dark mode.
+26. Fix empty sub-menus in compact language menu.
+27. Fix Search Results vertical scrolling not matching with OS mouse settings.
+28. Use modern question mark icon in dark message box.
+29. Format count numbers using current locale separators when needed.
+
+
+
+Get more info on
+https://notepad-plus-plus.org/downloads/v8.9.8.1/
+
+
+Included plugins:
+
+ 1.  NppExport v0.4
+ 2.  Converter v4.7
+ 3.  Mime Tool v3.1
+
+
+Updater (Installer only):
+
+* WinGUp (for Notepad++) v5.4.3
